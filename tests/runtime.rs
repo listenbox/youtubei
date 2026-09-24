@@ -14,6 +14,32 @@ static_assertions::assert_impl_all!(youtubei::models::VideoInfoData: Send, Sync)
 static_assertions::assert_impl_all!(youtubei::models::FormatInfo: Send, Sync);
 
 #[tokio::test(flavor = "current_thread")]
+async fn published_bundle_can_probe_optional_native_modules() -> youtubei::Result<()> {
+    let engine = Engine::new().await?;
+    engine
+        .value_with(|ctx| {
+            let module: rquickjs::Object = rquickjs::Module::import(&ctx, "module")?.finish()?;
+            let create: Function = module.get("createRequire")?;
+            let require: Function = create.call(("/",))?;
+            let buffer: rquickjs::Object = require.call(("node:buffer",))?;
+            assert!(buffer.contains_key("Buffer")?);
+            assert!(
+                require
+                    .call::<_, rquickjs::Value>(("worker_threads",))
+                    .is_err()
+            );
+            ctx.catch();
+            assert!(require.call::<_, rquickjs::Value>(("./local.js",)).is_err());
+            ctx.catch();
+            assert!(create.call::<_, Function>(("relative.js",)).is_err());
+            ctx.catch();
+            Ok(rquickjs::Value::new_undefined(ctx))
+        })
+        .await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn typed_snapshots_preserve_dates_nan_and_unknown_nodes() -> youtubei::Result<()> {
     use youtubei::models::{LockupContentType, PlaylistItem};
     let engine = Engine::new().await?;

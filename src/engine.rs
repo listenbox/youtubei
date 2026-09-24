@@ -41,7 +41,12 @@ impl Engine {
         let runtime = AsyncRuntime::new()?;
         runtime.set_memory_limit(options.memory_limit).await;
         runtime.set_max_stack_size(options.stack_size).await;
-        let (resolver, loader, globals) = ModuleBuilder::default().build();
+        let (resolver, loader, globals) = ModuleBuilder::default()
+            .with_module(llrt_utils::module::ModuleInfo {
+                name: "module",
+                module: platform::BuiltinModule,
+            })
+            .build();
         runtime.set_loader(resolver, loader).await;
         let context = AsyncContext::full(&runtime).await?;
         let exports = context
@@ -53,7 +58,7 @@ impl Engine {
                     let module = Module::declare(
                         ctx.clone(),
                         "youtubei",
-                        include_str!("../generated/youtubei.js"),
+                        include_str!(concat!(env!("OUT_DIR"), "/youtubei.js")),
                     )?;
                     let (module, evaluated) = module.eval()?;
                     evaluated.finish::<()>()?;

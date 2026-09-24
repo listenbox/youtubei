@@ -5,8 +5,11 @@ owns a reusable JavaScript instance; returned objects retain the same engine.
 No application TypeScript or JavaScript bridge runs inside it.
 
 Extracted from [Mazit](https://github.com/meoyawn/mazit/tree/fa0cd7c9edc3b0d25d91fd1bb93ef0f9bd58eb47/youtubei), preserving
-its MIT attribution. Cargo builds directly from a checkout: the complete upstream
-bundle and its license notices are committed under `generated/`.
+its MIT attribution. Build prerequisites are Rust, a C toolchain, and CMake.
+Cargo downloads the published `youtubei.js` 18.1.0 archive from the npm registry,
+verifies its SHA-256, reads `package/bundle/cf-worker.js`, and verifies that file's
+SHA-256 before embedding it. No JavaScript package manager, runtime, or bundler is
+needed. The upstream bundle is used unchanged, including its preserved names.
 
 ```sh
 cargo build --locked
@@ -14,22 +17,18 @@ cargo test --locked
 moon run youtubei:check
 ```
 
-A C toolchain and CMake build the native dependencies (Moon supplies CMake through
-pkgx). No JavaScript runtime or package
-manager is needed to build or use the crate. Consumers pin a commit:
+Moon supplies CMake through pkgx. Consumers pin a commit:
 
 ```toml
 youtubei = { git = "https://github.com/listenbox/youtubei.git", rev = "<commit>" }
 ```
 
-Bindings target the youtubei.js 18+ API. `upstream.json` pins 18.1.0 and every
-bundled dependency by version and SHA-512 integrity. Maintainers regenerate with
-`python3 scripts/bundle.py` on Linux x86-64 (Python 3.12+); `--check` verifies exact
-reproducibility in CI. The script downloads checksum-verified archives and a
-pinned native esbuild binary, with no package installation scripts. License texts
-omitted by the protobuf npm archive are retained in `licenses/` from
-[protobuf-es v2.15.0](https://github.com/bufbuild/protobuf-es/tree/v2.15.0) and
-[protobuf v34.0](https://github.com/protocolbuffers/protobuf/tree/v34.0).
+The upstream version and both hashes live in `package.metadata.youtubei` in
+Cargo.toml. A cold build needs access to the npm registry. Verified generated
+output stays in Cargo's build-specific `OUT_DIR`; it is reused while its checksum
+matches. Generated files are gitignored and excluded from the Cargo package.
+Concurrent consumers never write to the shared Git checkout. Upstream license
+texts are retained in `THIRD-PARTY-NOTICES.txt`.
 
 ```rust
 use youtubei::{Innertube, SessionOptions, models::PlaylistItem};
@@ -155,8 +154,14 @@ remain on the app's existing worker pool after receiving owned URL/metadata.
 The crate embeds rquickjs 0.11 with LLRT 0.8.1-beta's Rust implementations of
 fetch, streams, URL, events, timers, encoding, and crypto. Rust supplies
 `Platform.load`, player evaluation, structured cloning, and caching. The complete
-upstream `/cf-worker` entry point is bundled unchanged; Rust replaces its platform shim
+published `bundle/cf-worker.js` is loaded unchanged; Rust replaces its platform shim
 after evaluation. `--keep-names` is required by the upstream parser.
+
+The published bundle imports `module.createRequire` to probe optional worker
+threads. The crate supplies a native-only require factory because LLRT 0.8.1
+exports `require` directly under that name. Native module loads work; filesystem
+CommonJS loads and worker threads are unavailable and raise JavaScript errors.
+The bundle's own optional-worker handling catches that error.
 
 Tests run the real bundle offline: object lifetime/identity, independent workers,
 overlapping promises, Rust callbacks, errors, flat continuation pages, VISIONOS

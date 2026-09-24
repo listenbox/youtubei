@@ -6,6 +6,56 @@ use rquickjs::{
 };
 use sha1::{Digest, Sha1};
 
+/// The upstream CF-worker bundle probes Node's optional worker_threads via
+/// createRequire. This runtime supplies native modules, not a filesystem CJS
+/// loader. LLRT 0.8.1 incorrectly exports require itself as createRequire.
+pub(crate) struct BuiltinModule;
+
+impl rquickjs::module::ModuleDef for BuiltinModule {
+    fn declare(declarations: &rquickjs::module::Declarations) -> rquickjs::Result<()> {
+        declarations.declare("createRequire")?;
+        Ok(())
+    }
+
+    fn evaluate<'js>(
+        _ctx: &Ctx<'js>,
+        exports: &rquickjs::module::Exports<'js>,
+    ) -> rquickjs::Result<()> {
+        exports.export("createRequire", Func::from(create_require))?;
+        Ok(())
+    }
+}
+
+fn create_require<'js>(ctx: Ctx<'js>, filename: String) -> rquickjs::Result<Function<'js>> {
+    if !filename.starts_with('/')
+        && !filename.starts_with("file://")
+        && !std::path::Path::new(&filename).is_absolute()
+    {
+        return Err(rquickjs::Exception::throw_type(
+            &ctx,
+            "createRequire requires an absolute path or file URL",
+        ));
+    }
+    Function::new(
+        ctx,
+        |ctx: Ctx<'js>, specifier: String| -> rquickjs::Result<Value<'js>> {
+            let name = specifier.strip_prefix("node:").unwrap_or(&specifier);
+            let available = ctx
+                .userdata::<llrt_modules::module::ModuleNames>()
+                .is_some_and(|modules| modules.get_list().contains(name));
+            if !available {
+                return Err(rquickjs::Exception::throw_reference(
+                    &ctx,
+                    &format!("Native module unavailable: {specifier}"),
+                ));
+            }
+            ctx.globals()
+                .get::<_, Function>("require")?
+                .call((specifier,))
+        },
+    )
+}
+
 pub(crate) fn globals(ctx: &Ctx<'_>) -> rquickjs::Result<()> {
     ctx.globals()
         .set("structuredClone", Func::from(clone_value))?;
