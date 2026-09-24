@@ -1,0 +1,18 @@
+language: rust
+toolchains:
+  default: system
+tasks:
+  lint:
+    script: cargo fmt --all && pkgx +cmake.org cargo clippy --locked --all-targets -- -D warnings
+  test:
+    command: pkgx +cmake.org cargo test --locked
+  build:
+    command: pkgx +cmake.org cargo build --locked
+  bundle-check:
+    command: python3 scripts/bundle.py --check
+    options:
+      cache: false
+  check:
+    deps: [~:lint, ~:test, ~:build, ~:bundle-check]
+    options:
+      runInCI: false

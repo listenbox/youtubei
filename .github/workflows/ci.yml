@@ -1,0 +1,21 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: moonrepo/setup-toolchain@v0
+        with:
+          moon-version: "2.5.5"
+      - uses: pkgxdev/setup@v5
+      - run: rustup toolchain install 1.98.1 --profile minimal --component clippy,rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: moon ci

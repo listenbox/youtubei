@@ -1,0 +1,9 @@
+defaultProject: youtubei
+projects:
+  youtubei: .
+vcs:
+  defaultBranch: main
+pipeline:
+  installDependencies: false
+  syncProjects: false
+  syncWorkspace: false
